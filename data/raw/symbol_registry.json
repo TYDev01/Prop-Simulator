@@ -1,0 +1,102 @@
+{
+  "vol75": {
+    "alias": "vol75",
+    "symbol": "R_75",
+    "last_price": 49765.9223,
+    "median_tick_interval_s": 2.0,
+    "granularities": [
+      60,
+      120,
+      180,
+      300,
+      600,
+      900,
+      1800,
+      3600,
+      7200,
+      14400,
+      28800,
+      86400
+    ],
+    "display_name": "",
+    "market": "",
+    "submarket": "",
+    "pip": null,
+    "metadata_available": false
+  },
+  "vol75_1s": {
+    "alias": "vol75_1s",
+    "symbol": "1HZ75V",
+    "last_price": 6487.66,
+    "median_tick_interval_s": 1.0,
+    "granularities": [
+      60,
+      120,
+      180,
+      300,
+      600,
+      900,
+      1800,
+      3600,
+      7200,
+      14400,
+      28800,
+      86400
+    ],
+    "display_name": "",
+    "market": "",
+    "submarket": "",
+    "pip": null,
+    "metadata_available": false
+  },
+  "boom1000": {
+    "alias": "boom1000",
+    "symbol": "BOOM1000",
+    "last_price": 14787.131,
+    "median_tick_interval_s": 1.0,
+    "granularities": [
+      60,
+      120,
+      180,
+      300,
+      600,
+      900,
+      1800,
+      3600,
+      7200,
+      14400,
+      28800,
+      86400
+    ],
+    "display_name": "",
+    "market": "",
+    "submarket": "",
+    "pip": null,
+    "metadata_available": false
+  },
+  "crash1000": {
+    "alias": "crash1000",
+    "symbol": "CRASH1000",
+    "last_price": 6071.98,
+    "median_tick_interval_s": 1.0,
+    "granularities": [
+      60,
+      120,
+      180,
+      300,
+      600,
+      900,
+      1800,
+      3600,
+      7200,
+      14400,
+      28800,
+      86400
+    ],
+    "display_name": "",
+    "market": "",
+    "submarket": "",
+    "pip": null,
+    "metadata_available": false
+  }
+}
