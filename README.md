@@ -124,6 +124,10 @@ export PYTHONPATH=.
 ./.venv/bin/python scripts/validate_synth.py    # synthetic vs real ticks
 ./.venv/bin/python scripts/sweep_risk.py 200    # P(pass) surface (~90 min)
 ./.venv/bin/python scripts/run_campaign.py 200  # expected 12-mo net after fees
+
+# Visual results dashboard (self-contained HTML; open in a browser):
+./.venv/bin/python scripts/generate_dashboard_data.py   # run the live pipeline
+./.venv/bin/python scripts/build_dashboard.py           # -> docs/dashboard.html
 ```
 
 Run the tick recorder continuously — **Deriv serves only 24h of tick history, so
@@ -198,7 +202,9 @@ optimal play is one huge bet, and those rules are what forbid it.
 | 5 | Boom/Crash hazard study at full power | recording |
 
 Also built beyond the original phases: full order model (limit/stop/trailing/
-break-even/partials), and validated M15 long-history replay.
+break-even/partials), validated M15 long-history replay, a managed seed v2 (tested
+and rejected — see [`docs/strategy_versions.md`](docs/strategy_versions.md)), and a
+self-contained results dashboard (`scripts/build_dashboard.py`).
 
 Known bugs, unverified numbers, and open questions:
 [`REMAINING.md`](REMAINING.md).

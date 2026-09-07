@@ -127,6 +127,7 @@ class RunResult:
     ledger: Ledger
     state: ChallengeState
     elapsed_days: float = 0.0    # calendar days from first tick to the last processed
+    equity_samples: list = field(default_factory=list)   # (epoch, equity), if sampled
 
 
 @dataclass
@@ -141,7 +142,8 @@ class SimEngine:
         self._excursions: dict[int, tuple[float, float]] = {}
 
     def run(self, ticks: pd.DataFrame, strategy: Strategy, phase_index: int = 0,
-            starting_balance: float | None = None) -> RunResult:
+            starting_balance: float | None = None,
+            sample_every: int | None = None) -> RunResult:
         feed = TickFeed(ticks)
         ledger = Ledger(spec=self.spec,
                         starting_balance=starting_balance or self.rules.account_size)
@@ -151,6 +153,7 @@ class SimEngine:
                                start_balance=ledger.starting_balance)
         self._excursions = {}
 
+        equity_samples: list = []      # (epoch, equity), only when sample_every is set
         prev_mid: float | None = None
         last_epoch = first_epoch
         n = 0
@@ -210,6 +213,8 @@ class SimEngine:
                 break
 
             strategy.on_tick(Context(view=view, ledger=ledger, state=state, engine=self))
+            if sample_every and n % sample_every == 0:
+                equity_samples.append((view.epoch, ledger.equity(mid)))
             prev_mid = mid
 
         # Running out of data without passing IS a failure: the deadline arrived
@@ -229,6 +234,7 @@ class SimEngine:
             peak_equity=state.peak_equity, trades=len(ledger.closed),
             trading_days=len(ledger.trading_days), ledger=ledger, state=state,
             elapsed_days=(last_epoch - first_epoch) / 86400.0,
+            equity_samples=equity_samples,
         )
 
     def _enforce_stop_out(self, ledger: Ledger, mid: float, epoch: int) -> bool:

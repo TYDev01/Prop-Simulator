@@ -62,12 +62,19 @@ class ReducedMAE:
     stop_lookback: int = 10           # swing window that places the structural stop
     cooldown_bars: int = 3            # min bars between entries (selectivity)
     decide: DecideHook | None = None  # optional gate (the Opus overlay); None = core
+    # Trade management (§5), all in units of the initial risk R. Off by default, so
+    # the bare seed is unchanged; the v2 config below turns them on.
+    breakeven_at_r: float | None = None   # move the stop to entry once +R reached
+    partial_at_r: float | None = None     # close half the position at +R
+    trail_at_r: float | None = None       # trail the stop this many R behind price
 
     _bars: deque = field(init=False, repr=False)
     _bucket: int | None = field(default=None, init=False, repr=False)
     _cur: _Bar | None = field(default=None, init=False, repr=False)
     _bars_since_trade: int = field(default=10**9, init=False, repr=False)
     last_invalidation: float | None = field(default=None, init=False, repr=False)
+    _open_stop_dist: float = field(default=0.0, init=False, repr=False)
+    _partial_done: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
         cap = max(self.donchian_lookback, self.bias_lookback, self.stop_lookback) + 2
@@ -77,6 +84,19 @@ class ReducedMAE:
 
     def on_tick(self, ctx: Context) -> None:
         price = ctx.mid
+
+        # Manage the open position every tick (break-even and trailing are handled by
+        # the engine from the entry parameters; the partial close must be triggered
+        # here). One position at a time, so index 0 is safe.
+        if (self.partial_at_r and not self._partial_done and ctx.ledger.positions
+                and self._open_stop_dist > 0):
+            pos = ctx.ledger.positions[0]
+            target = pos.entry_price + pos.direction * self.partial_at_r * self._open_stop_dist
+            reached = price >= target if pos.direction > 0 else price <= target
+            if reached:
+                ctx.close_partial(pos, 0.5, reason="tp1")
+                self._partial_done = True
+
         bucket = ctx.view.epoch // self.bar_seconds
 
         if self._bucket is None:
@@ -124,10 +144,19 @@ class ReducedMAE:
         meta.update(direction=cand.direction, invalidation=cand.invalidation,
                     risk_pct=cand.risk_pct)
         meta.update(cand.meta)
+
+        # Translate the R-based management knobs into engine parameters.
+        be_trigger = (cand.entry + cand.direction * self.breakeven_at_r * cand.stop_dist
+                      if self.breakeven_at_r else None)
+        trail_dist = (self.trail_at_r * cand.stop_dist if self.trail_at_r else None)
+
         opened = (ctx.buy if cand.direction > 0 else ctx.sell)(
-            cand.lots, sl=cand.sl, tp=cand.tp, tag=cand.tag, meta=meta)
+            cand.lots, sl=cand.sl, tp=cand.tp, tag=cand.tag, meta=meta,
+            breakeven_trigger=be_trigger, trail_distance=trail_dist)
         if opened is not None:
             self._bars_since_trade = 0
+            self._open_stop_dist = cand.stop_dist
+            self._partial_done = False
 
     def _propose(self, ctx: Context) -> Candidate | None:
         """The pure candidate-detection logic: data in, a Candidate or None out."""
@@ -196,6 +225,9 @@ class ReducedMAEFactory:
     stop_lookback: int = 10
     cooldown_bars: int = 3
     decide: DecideHook | None = None   # supply to run core+overlay; None = core-only
+    breakeven_at_r: float | None = None
+    partial_at_r: float | None = None
+    trail_at_r: float | None = None
 
     def __call__(self, seed: int) -> ReducedMAE:
         return ReducedMAE(
@@ -203,4 +235,24 @@ class ReducedMAEFactory:
             donchian_lookback=self.donchian_lookback,
             bias_lookback=self.bias_lookback, stop_lookback=self.stop_lookback,
             cooldown_bars=self.cooldown_bars, decide=self.decide,
+            breakeven_at_r=self.breakeven_at_r, partial_at_r=self.partial_at_r,
+            trail_at_r=self.trail_at_r,
         )
+
+
+def seed_v2_factory() -> ReducedMAEFactory:
+    """Strategy v2, advanced from the v1 findings (docs/strategy_versions.md).
+
+    v1 was over-selective (few trades ⇒ deadline expiries) and had no way to bank a
+    partial win before a reversal. On a zero-edge instrument entries can't add edge,
+    so v2 works only the risk geometry that §2.3 says is the real lever: trade a bit
+    more often (looser channel, shorter cooldown) to fund the trading-day minimum, and
+    manage each trade with break-even + a half-off partial so a runner that reverses
+    doesn't give the whole move back. It is a challenger, not a claimed edge — the
+    research loop decides whether it earns promotion.
+    """
+    return ReducedMAEFactory(
+        risk_pct=1.0, rr=2.0, donchian_lookback=12, bias_lookback=40,
+        stop_lookback=10, cooldown_bars=1,
+        breakeven_at_r=1.0, partial_at_r=1.0, trail_at_r=2.0,
+    )
