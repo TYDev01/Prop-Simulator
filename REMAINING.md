@@ -140,9 +140,22 @@ no difference for the null. **The one piece still data-gated:** the real-Vol75-v
 comparison (§6) needs captured real ticks to plug in as the second source — the
 harness is ready, the data is not.
 
-### 2.7 [GAP] Long-history replay
-M1 covers only ~6 weeks. Synthesis from M15 for the full 365 days is designed but
-not implemented, and its lower intra-bar resolution needs its own validation.
+### 2.7 [DONE] Long-history replay
+Implemented and validated. `propfirm/data/replay.py` expands M15 (or any) OHLC bars
+into a tick series with the M1 bridge synthesis, chunked to bound memory over a full
+year (~35k bars → ~15.7M 2s ticks); `data/bars.py` aggregates ticks → OHLC;
+`data/synth_validate.py` runs the increment diagnostics.
+
+**Validated finding** (`scripts/validate_m15_replay.py`, `docs/m15_replay_validation.json`):
+M15 replay reproduces per-tick sigma (~0.8% error), lag-1 autocorrelation (≈0, no
+manufactured momentum) and up-tick balance (≈50%). It **fails** the kurtosis check
+(~+2.2 vs a real ≈0) because snapping the two extremes to the exact H/L over a 900s
+bar creates wick-spikes that fatten the increment tails — the exact resolution risk
+§2.7 warned about. **But the decisive test passes:** P(pass) on the true tick path vs
+its M15 replay is statistically indistinguishable (27.5% vs 22.5%, p≈0.61), so the
+replay is fit for P(pass) estimation with the kurtosis caveat noted. A less spiky
+snap (distributing the H/L adjustment over neighbours) would close the gap if any
+future use needs faithful tails. Tests: `tests/test_replay.py`.
 
 ---
 

@@ -144,7 +144,8 @@ PYTHONPATH=. setsid nohup ./.venv/bin/python scripts/record_ticks.py \
 ```
 propfirm/
   data/       Deriv WS client, symbol verification, history paging, parquet store,
-              MT5 tick reader, forward recorder, tick synthesis
+              MT5 tick reader, forward recorder, tick synthesis, bar aggregation,
+              M15 long-history replay + its statistical validation
   sim/        contract spec, no-lookahead feed, fill engine, ledger, engine loop,
               order model (market/limit/stop, trailing, break-even, partials)
   rules/      prop-firm rulesets, breach detection, career payout ledger, campaign
@@ -195,6 +196,9 @@ optimal play is one huge bet, and those rules are what forbid it.
 | 3 | Opus decision layer, A/B against the core | scaffolding built (mock-testable; live run gated on budget) |
 | 4 | Research loop, pre-registration, champion/challenger | done (daily-adherence audit + live Opus researcher pending) |
 | 5 | Boom/Crash hazard study at full power | recording |
+
+Also built beyond the original phases: full order model (limit/stop/trailing/
+break-even/partials), and validated M15 long-history replay.
 
 Known bugs, unverified numbers, and open questions:
 [`REMAINING.md`](REMAINING.md).
