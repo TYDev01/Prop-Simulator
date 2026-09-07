@@ -149,7 +149,8 @@ propfirm/
   rules/      prop-firm rulesets, breach detection, career payout ledger, campaign
   strategy/   control strategies (random entry, no-trade), reduced-M.A.E. seed
   research/   Monte Carlo harness, Boom/Crash spike analysis
-  llm/        (empty -- Phase 3)
+  llm/        Phase 3 overlay: state packet, strict schema, Opus/mock providers,
+              dual-mode switch (core vs core+overlay)
 scripts/      operational entry points
 tests/        pytest suite (leakage, determinism, ledger, fills, breach, career)
 data/raw/     immutable store (gitignored; ticks are NOT regenerable)
@@ -189,7 +190,7 @@ optimal play is one huge bet, and those rules are what forbid it.
 | 0 | Data layer, spread measurement, timeframe decision | done |
 | 1 | Tick-level engine, leakage gate | done |
 | 2 | Rule engine, Monte Carlo, controls | done |
-| 3 | Opus decision layer, A/B against the core | not started |
+| 3 | Opus decision layer, A/B against the core | scaffolding built (mock-testable; live run gated on budget) |
 | 4 | Research loop, pre-registration, champion/challenger | not started |
 | 5 | Boom/Crash hazard study at full power | recording |
 

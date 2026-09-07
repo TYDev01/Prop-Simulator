@@ -27,8 +27,15 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
+from typing import Callable
 
 from propfirm.sim.engine import Context
+from propfirm.strategy.candidate import Candidate
+
+# A decision hook gates a proposed candidate: it returns the candidate to open
+# (possibly adjusted), or None to veto. This is the seam the Opus overlay plugs
+# into; with no hook the core opens its own candidates unchanged (§3 dual-mode).
+DecideHook = Callable[[Context, Candidate], "Candidate | None"]
 
 
 @dataclass
@@ -54,6 +61,7 @@ class ReducedMAE:
     bias_lookback: int = 50           # slow mean the breakout must agree with
     stop_lookback: int = 10           # swing window that places the structural stop
     cooldown_bars: int = 3            # min bars between entries (selectivity)
+    decide: DecideHook | None = None  # optional gate (the Opus overlay); None = core
 
     _bars: deque = field(init=False, repr=False)
     _bucket: int | None = field(default=None, init=False, repr=False)
@@ -98,6 +106,25 @@ class ReducedMAE:
         if self._bars_since_trade < self.cooldown_bars:
             return
 
+        cand = self._propose(ctx)
+        if cand is None:
+            return
+
+        # Core-only opens the candidate as-is. With an overlay, the decision hook
+        # sees the candidate and may veto (None) or return an adjusted one.
+        if self.decide is not None:
+            cand = self.decide(ctx, cand)
+            if cand is None:
+                return
+
+        self.last_invalidation = cand.invalidation
+        opened = (ctx.buy if cand.direction > 0 else ctx.sell)(
+            cand.lots, sl=cand.sl, tp=cand.tp, tag=cand.tag)
+        if opened is not None:
+            self._bars_since_trade = 0
+
+    def _propose(self, ctx: Context) -> Candidate | None:
+        """The pure candidate-detection logic: data in, a Candidate or None out."""
         bars = list(self._bars)
         price = ctx.mid
 
@@ -116,28 +143,33 @@ class ReducedMAE:
             swing = max(b.h for b in bars[-self.stop_lookback:])
             stop_dist = swing - price
         else:
-            return
+            return None
         if stop_dist <= 0:
-            return
+            return None
 
         risk_amount = ctx.equity * self.risk_pct / 100.0
         # Never risk more than the room left to the daily loss floor.
         risk_amount = min(risk_amount, max(0.0, ctx.room_to_daily_loss() * 0.9))
         if risk_amount <= 0:
-            return
+            return None
 
         lots = ctx.engine.spec.lots_for_risk(risk_amount, stop_dist)
         if lots < ctx.engine.spec.min_lot:
-            return
+            return None
 
         entry = ctx.engine.fills.entry_price(direction, price)
         sl = swing                                     # structural stop = invalidation
         tp = entry + direction * stop_dist * self.rr
-        self.last_invalidation = swing
-        opened = (ctx.buy if direction > 0 else ctx.sell)(
-            lots, sl=sl, tp=tp, tag=f"mae:inv={swing:.1f}")
-        if opened is not None:
-            self._bars_since_trade = 0
+        return Candidate(
+            direction=direction, lots=lots, entry=entry, sl=sl, tp=tp,
+            stop_dist=stop_dist, invalidation=swing, risk_pct=self.risk_pct,
+            features={
+                "price": price, "donchian_upper": upper, "donchian_lower": lower,
+                "bias_sma": sma, "breakout_pts": abs(price - (upper if direction > 0 else lower)),
+                "stop_dist": stop_dist, "rr": self.rr,
+            },
+            tag=f"mae:inv={swing:.1f}",
+        )
 
 
 @dataclass(frozen=True)
@@ -157,11 +189,12 @@ class ReducedMAEFactory:
     bias_lookback: int = 50
     stop_lookback: int = 10
     cooldown_bars: int = 3
+    decide: DecideHook | None = None   # supply to run core+overlay; None = core-only
 
     def __call__(self, seed: int) -> ReducedMAE:
         return ReducedMAE(
             risk_pct=self.risk_pct, rr=self.rr, bar_seconds=self.bar_seconds,
             donchian_lookback=self.donchian_lookback,
             bias_lookback=self.bias_lookback, stop_lookback=self.stop_lookback,
-            cooldown_bars=self.cooldown_bars,
+            cooldown_bars=self.cooldown_bars, decide=self.decide,
         )

@@ -41,15 +41,27 @@ still `0.0`/`UNVERIFIED` it currently charges nothing — real values are needed
 
 ## 2. Missing capability
 
-### 2.1 [GAP] The whole LLM layer — `propfirm/llm/` is empty
-Nothing in Phase 3 exists. Required per spec section 3:
-- State-packet builder (bars across three timeframes, features, position state,
-  and account state including distance to both loss limits)
-- Strict JSON response schema with validation; malformed ⇒ no trade, logged
-- Opus client with cost accounting
-- **Dual-mode switch** so deterministic-core and core+overlay run on identical
-  data. Without this the central question — does the overlay beat the core? — is
-  unanswerable.
+### 2.1 [DONE] The LLM layer — `propfirm/llm/`
+Phase 3 scaffolding is built, behind a provider interface so the whole overlay is
+exercisable offline at zero cost:
+- **State-packet builder** (`state_packet.py`) — recent bars, candidate features,
+  position state, and account state including distance to both loss floors, days
+  elapsed, and progress to target.
+- **Strict JSON schema + validation** (`schema.py`) — `DECISION_JSON_SCHEMA` for
+  `output_config.format`, and `parse_decision`, which degrades any malformed
+  response to a logged no-trade (never raises).
+- **Opus client with cost accounting + full call logging** (`provider.py`) —
+  `OpusProvider` (lazy `anthropic` import, `CostMeter`, JSONL prompt/response log)
+  and `MockProvider` (free, deterministic; used by the tests and the offline A/B).
+- **Dual-mode switch** (`overlay.py`) — the seed exposes candidates via a `decide`
+  hook; `dual_mode()` returns core-only and core+overlay factories from one config
+  so both run on identical data. Hard risk limits stay in Python: the overlay may
+  only tighten risk, never raise it. A/B entry point: `scripts/run_overlay_ab.py`.
+  Tests in `tests/test_llm.py`.
+
+**Not yet run live:** a real Opus A/B spends money and needs credentials, so the
+script wires `OpusProvider` but leaves firing it — and the LLM budget decision
+(§7.4) — to the user. Per-trade research logging (§2.2) is still the next gap.
 
 ### 2.2 [GAP] The research loop — `propfirm/research/` has only Monte Carlo
 Required per spec section 8:
