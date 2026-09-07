@@ -57,7 +57,10 @@ class OpusOverlay:
         return Candidate(direction=cand.direction, lots=lots, entry=cand.entry,
                          sl=sl, tp=tp, stop_dist=cand.stop_dist,
                          invalidation=cand.invalidation, risk_pct=cand.risk_pct,
-                         features=cand.features, tag=cand.tag)
+                         features=cand.features, tag=cand.tag,
+                         meta={"overlay_action": decision.action,
+                               "overlay_confidence": decision.confidence,
+                               "overlay_reasoning": decision.reasoning})
 
 
 def dual_mode(provider: DecisionProvider, **seed_params

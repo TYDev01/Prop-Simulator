@@ -1,0 +1,43 @@
+{
+  "stats": {
+    "candidate": {
+      "n_ticks": 216450,
+      "sigma": 0.00019011823442078207,
+      "autocorr1": -0.015456309864881872,
+      "uptick_frac": 0.49364053425980253,
+      "kurtosis": 2.1875760458519213,
+      "theoretical_sigma": 0.00018887433912984357
+    },
+    "reference": {
+      "n_ticks": 216000,
+      "sigma": 0.00018866141616778943,
+      "autocorr1": -0.0016816811076026455,
+      "uptick_frac": 0.4994236084426317,
+      "kurtosis": 0.026588666154718776,
+      "theoretical_sigma": 0.00018887433912984357
+    },
+    "sigma_rel_error": 0.007721866413305192,
+    "checks": {
+      "sigma": true,
+      "autocorr1": true,
+      "uptick_frac": true,
+      "kurtosis": false
+    },
+    "passed": false
+  },
+  "ohlc": {
+    "open": 0.0,
+    "high": 0.3765579776262789,
+    "low": 0.3657580282140056,
+    "close": 0.0,
+    "n": 481
+  },
+  "p_pass": {
+    "n": 40,
+    "p_pass_truth": 0.275,
+    "p_pass_m15": 0.225,
+    "delta": 0.05000000000000002,
+    "p_value": 0.6055766163353464
+  },
+  "p_pass_preserved": true
+}

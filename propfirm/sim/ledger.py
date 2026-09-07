@@ -33,6 +33,15 @@ class Position:
     sl: float | None = None
     tp: float | None = None
     tag: str = ""
+    # Per-trade metadata for the research log (§8): features at entry, declared
+    # invalidation, and any decision-layer reasoning. Opaque to the engine.
+    meta: dict = field(default_factory=dict)
+    # Order management (§5). Trailing ratchets the stop this far behind price;
+    # break-even moves the stop to entry (+offset) once price reaches the trigger.
+    trail_distance: float | None = None
+    breakeven_trigger: float | None = None
+    breakeven_offset: float = 0.0
+    _breakeven_done: bool = False
 
     def floating(self, spec: ContractSpec, mark: float) -> float:
         return spec.pnl(self.direction, self.lots, self.entry_price, mark)
@@ -51,6 +60,7 @@ class ClosedTrade:
     mae: float = 0.0             # worst adverse excursion while open, in price
     mfe: float = 0.0             # best favourable excursion while open, in price
     tag: str = ""
+    meta: dict = field(default_factory=dict)   # carried through from the Position
 
 
 def broker_day(epoch: int, offset_hours: int = BROKER_UTC_OFFSET_HOURS) -> str:
@@ -76,6 +86,7 @@ class Ledger:
     balance: float = 0.0
     positions: list[Position] = field(default_factory=list)
     closed: list[ClosedTrade] = field(default_factory=list)
+    pending: list = field(default_factory=list)     # resting limit/stop entries
 
     day_start_equity: float = 0.0
     current_day: str = ""
@@ -169,6 +180,40 @@ class Ledger:
             entry_price=position.entry_price, exit_price=exit_price,
             opened_epoch=position.opened_epoch, closed_epoch=epoch,
             pnl=pnl, reason=reason, mae=mae, mfe=mfe, tag=position.tag,
+            meta=position.meta,
+        )
+        self.closed.append(trade)
+        return trade
+
+    def close_partial(self, position: Position, fraction: float, exit_price: float,
+                      epoch: int, reason: str, mae: float = 0.0, mfe: float = 0.0
+                      ) -> ClosedTrade | None:
+        """Close a fraction (0..1] of a position, banking that share of the P&L.
+
+        The remaining lots stay open at the same entry, stop, and target. A fraction
+        that would leave less than the minimum lot closes the whole position instead,
+        so a partial never strands an un-closeable remainder.
+        """
+        fraction = max(0.0, min(1.0, fraction))
+        if fraction <= 0.0:
+            return None
+        closed_lots = position.lots * fraction
+        remaining = position.lots - closed_lots
+        if fraction >= 1.0 or remaining < self.spec.min_lot:
+            return self.close(position, exit_price, epoch, reason, mae, mfe)
+
+        pnl = self.spec.pnl(position.direction, closed_lots,
+                            position.entry_price, exit_price)
+        self.balance += pnl
+        position.lots = remaining
+        day = broker_day(epoch)
+        self.daily_pnl[day] = self.daily_pnl.get(day, 0.0) + pnl
+        trade = ClosedTrade(
+            direction=position.direction, lots=closed_lots,
+            entry_price=position.entry_price, exit_price=exit_price,
+            opened_epoch=position.opened_epoch, closed_epoch=epoch,
+            pnl=pnl, reason=reason, mae=mae, mfe=mfe, tag=position.tag,
+            meta={**position.meta, "partial": fraction},
         )
         self.closed.append(trade)
         return trade

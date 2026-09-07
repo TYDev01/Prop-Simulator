@@ -124,6 +124,10 @@ export PYTHONPATH=.
 ./.venv/bin/python scripts/validate_synth.py    # synthetic vs real ticks
 ./.venv/bin/python scripts/sweep_risk.py 200    # P(pass) surface (~90 min)
 ./.venv/bin/python scripts/run_campaign.py 200  # expected 12-mo net after fees
+
+# Visual results dashboard (self-contained HTML; open in a browser):
+./.venv/bin/python scripts/generate_dashboard_data.py   # run the live pipeline
+./.venv/bin/python scripts/build_dashboard.py           # -> docs/dashboard.html
 ```
 
 Run the tick recorder continuously — **Deriv serves only 24h of tick history, so
@@ -144,11 +148,14 @@ PYTHONPATH=. setsid nohup ./.venv/bin/python scripts/record_ticks.py \
 ```
 propfirm/
   data/       Deriv WS client, symbol verification, history paging, parquet store,
-              MT5 tick reader, forward recorder, tick synthesis
-  sim/        contract spec, no-lookahead feed, fill engine, ledger, engine loop
+              MT5 tick reader, forward recorder, tick synthesis, bar aggregation,
+              M15 long-history replay + its statistical validation
+  sim/        contract spec, no-lookahead feed, fill engine, ledger, engine loop,
+              order model (market/limit/stop, trailing, break-even, partials)
   rules/      prop-firm rulesets, breach detection, career payout ledger, campaign
   strategy/   control strategies (random entry, no-trade), reduced-M.A.E. seed
-  research/   Monte Carlo harness, Boom/Crash spike analysis
+  research/   Monte Carlo, research loop (trade log, pre-registration, validation
+              partitioning, multiple-testing ledger, champion/challenger), spikes
   llm/        Phase 3 overlay: state packet, strict schema, Opus/mock providers,
               dual-mode switch (core vs core+overlay)
 scripts/      operational entry points
@@ -191,8 +198,13 @@ optimal play is one huge bet, and those rules are what forbid it.
 | 1 | Tick-level engine, leakage gate | done |
 | 2 | Rule engine, Monte Carlo, controls | done |
 | 3 | Opus decision layer, A/B against the core | scaffolding built (mock-testable; live run gated on budget) |
-| 4 | Research loop, pre-registration, champion/challenger | not started |
+| 4 | Research loop, pre-registration, champion/challenger | done (daily-adherence audit + live Opus researcher pending) |
 | 5 | Boom/Crash hazard study at full power | recording |
+
+Also built beyond the original phases: full order model (limit/stop/trailing/
+break-even/partials), validated M15 long-history replay, a managed seed v2 (tested
+and rejected — see [`docs/strategy_versions.md`](docs/strategy_versions.md)), and a
+self-contained results dashboard (`scripts/build_dashboard.py`).
 
 Known bugs, unverified numbers, and open questions:
 [`REMAINING.md`](REMAINING.md).

@@ -63,18 +63,30 @@ exercisable offline at zero cost:
 script wires `OpusProvider` but leaves firing it — and the LLM budget decision
 (§7.4) — to the user. Per-trade research logging (§2.2) is still the next gap.
 
-### 2.2 [GAP] The research loop — `propfirm/research/` has only Monte Carlo
-Required per spec section 8:
-- Per-trade logging (features at entry, decision, reasoning, declared
-  invalidation, outcome, MAE/MFE). MAE/MFE are computed but not persisted.
-- Daily adherence audit, kept separate from strategy change
-- Pre-registration: predicted effect and falsification criterion recorded *before*
-  testing
-- Validation gate: discovery/validation/holdout partitioning, holdout touched once
-- **Running multiple-testing ledger that never resets**
-- Champion/challenger with out-of-sample promotion margin
-- Strategy versioning with rationale, evidence, and test result per change
-- Calibration score for Opus-as-researcher (how often do its predictions hold?)
+### 2.2 [DONE] The research loop — `propfirm/research/`
+Built per spec section 8/9.1, all pure-Python and tested (`tests/test_research.py`),
+tied together end-to-end by `scripts/research_demo.py`:
+- **Per-trade logging** (`trade_log.py`) — features at entry, declared invalidation,
+  overlay reasoning, outcome, MAE/MFE, and realised R. Entry metadata now flows
+  candidate → position → closed trade via a `meta` dict.
+- **Pre-registration + calibration** (`preregistration.py`) — predicted effect,
+  falsification criterion, and price level recorded *before* the test; a hit-rate
+  and Brier calibration score for the researcher.
+- **Validation gate** (`partition.py`) — discovery/validation/holdout seed split
+  with a `HoldoutGuard` that raises on a second access (touch-once, enforced).
+- **Running multiple-testing ledger that never resets** (`multiple_testing.py`) —
+  Bonferroni bar that tightens with every test, Benjamini-Hochberg FDR, JSONL
+  persistence that restores the count across restarts.
+- **Champion/challenger** (`champion_challenger.py`) — out-of-sample promotion
+  margin, versioning with rationale/evidence/test-result per change.
+- **Partition-aware evaluation** (`evaluate.py`) — scores a factory over a specific
+  seed set; `compare` runs two arms on identical seeds with a two-proportion test.
+- **Daily rule-adherence audit** (`adherence.py`) — the second cadence, kept separate
+  from strategy change: per-day loss-room used, stop-slippage past 1R, the
+  consistency cap, and min-trading-days progress, in realised terms.
+
+**Still open:** driving these from a live *Opus* researcher (auto hypothesis
+generation) needs the LLM budget (§7.4). The demo uses a fixed hypothesis.
 
 ### 2.3 [DONE] Career progression and payout are wired
 `propfirm/rules/campaign.py` drives the full career: fee → phase 1 → phase 2 →
@@ -103,18 +115,47 @@ campaign; `scripts/compare_seed.py` runs it against random entry on identical se
 As §2.2 requires, this is expected to be indistinguishable from random entry — it is
 the seed the research loop (Phase 4) evolves, not a claimed edge.
 
-### 2.5 [GAP] Order types
-Spec section 5 requires market, limit, stop, trailing stop, break-even shift, and
-partial closes. Only market orders with static SL/TP exist.
+### 2.5 [DONE] Order types
+Spec section 5's full set now exists (`propfirm/sim/orders.py` + engine/ledger):
+- **Limit and stop entries** — resting `PendingOrder`s resolved each tick; a limit
+  fills at its level, a stop at the worse of its level and the available price (gap
+  honesty), with optional GTD expiry. `ctx.buy_limit/sell_limit/buy_stop/sell_stop`.
+- **Trailing stop** — `trail_distance` ratchets the stop behind price and never
+  loosens on a gap; resolved against the step's stop, then trailed for the next tick.
+- **Break-even shift** — `breakeven_trigger` (+ optional offset) moves the stop to
+  entry once price reaches the trigger.
+- **Partial closes** — `ctx.close_partial(pos, fraction)` banks part of a position
+  and keeps the rest; a fraction that would strand a sub-min-lot remainder closes
+  fully instead.
+Tests in `tests/test_orders.py` (11). A freshly-filled order is never resolved on its
+own opening tick.
 
-### 2.6 [GAP] Controls are not run alongside
-Spec section 9.1 requires random-entry and synthetic-GBM controls running
-*continuously*, not as one-offs. `gbm_ticks()` exists but no comparison harness runs
-a candidate against both arms automatically.
+### 2.6 [DONE] Controls run alongside
+`research/evaluate.py::compare` runs a candidate against the random-entry control on
+identical seeds with a significance test, and `champion_challenger.consider` scores
+both arms out-of-sample as a matter of course. The matched-vol GBM control arm is now
+wired too: `run_trials` takes a pluggable `path_fn`, and `compare_sources` runs one
+strategy across two tick sources (`gbm_path` vs `matched_gbm`), correctly reporting
+no difference for the null. **The one piece still data-gated:** the real-Vol75-vs-GBM
+comparison (§6) needs captured real ticks to plug in as the second source — the
+harness is ready, the data is not.
 
-### 2.7 [GAP] Long-history replay
-M1 covers only ~6 weeks. Synthesis from M15 for the full 365 days is designed but
-not implemented, and its lower intra-bar resolution needs its own validation.
+### 2.7 [DONE] Long-history replay
+Implemented and validated. `propfirm/data/replay.py` expands M15 (or any) OHLC bars
+into a tick series with the M1 bridge synthesis, chunked to bound memory over a full
+year (~35k bars → ~15.7M 2s ticks); `data/bars.py` aggregates ticks → OHLC;
+`data/synth_validate.py` runs the increment diagnostics.
+
+**Validated finding** (`scripts/validate_m15_replay.py`, `docs/m15_replay_validation.json`):
+M15 replay reproduces per-tick sigma (~0.8% error), lag-1 autocorrelation (≈0, no
+manufactured momentum) and up-tick balance (≈50%). It **fails** the kurtosis check
+(~+2.2 vs a real ≈0) because snapping the two extremes to the exact H/L over a 900s
+bar creates wick-spikes that fatten the increment tails — the exact resolution risk
+§2.7 warned about. **But the decisive test passes:** P(pass) on the true tick path vs
+its M15 replay is statistically indistinguishable (27.5% vs 22.5%, p≈0.61), so the
+replay is fit for P(pass) estimation with the kurtosis caveat noted. A less spiky
+snap (distributing the H/L adjustment over neighbours) would close the gap if any
+future use needs faithful tails. Tests: `tests/test_replay.py`.
 
 ---
 
