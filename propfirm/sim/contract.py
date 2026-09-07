@@ -39,8 +39,13 @@ class ContractSpec:
     # Risk
     leverage: float              # e.g. 500 => 0.2% margin
     stops_level_points: float    # minimum SL/TP distance from price
-    swap_long: float
-    swap_short: float
+    swap_long: float             # account currency per lot per night held, long
+    swap_short: float            # account currency per lot per night held, short
+
+    # Margin level (equity / used-margin %) at which the broker force-closes
+    # positions. Distinct from the prop max-loss rule, which usually triggers
+    # first; matters only for high-leverage configs (REMAINING.md §1.2).
+    stop_out_level_pct: float = 50.0
 
     provenance: dict[str, Provenance] = field(default_factory=dict)
 
@@ -58,6 +63,16 @@ class ContractSpec:
 
     def value_per_point(self, lots: float) -> float:
         return lots * self.contract_size * self.point
+
+    def swap_charge(self, direction: int, lots: float) -> float:
+        """One night's swap for an open position, in account currency.
+
+        Signed as an adjustment to balance: negative is a cost. Triple-charge on
+        the Wednesday rollover is a refinement not modelled here; with both swap
+        rates at 0.0 (UNVERIFIED) this currently charges nothing (REMAINING.md §1.3).
+        """
+        rate = self.swap_long if direction > 0 else self.swap_short
+        return rate * lots
 
     def lots_for_risk(self, risk_amount: float, stop_distance: float) -> float:
         """Lot size such that hitting the stop loses `risk_amount`."""
@@ -85,6 +100,7 @@ VOL75 = ContractSpec(
     stops_level_points=0.0,
     swap_long=0.0,
     swap_short=0.0,
+    stop_out_level_pct=50.0,
     provenance={
         "digits": Provenance.MEASURED,        # 4dp seen in live tick quotes
         "spread_points": Provenance.MEASURED, # 4.50 pts, constant over 2048 ticks
@@ -96,6 +112,7 @@ VOL75 = ContractSpec(
         "stops_level_points": Provenance.UNVERIFIED,
         "swap_long": Provenance.UNVERIFIED,
         "swap_short": Provenance.UNVERIFIED,
+        "stop_out_level_pct": Provenance.UNVERIFIED,
     },
 )
 

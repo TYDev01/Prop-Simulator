@@ -112,7 +112,9 @@ Underpowered at ~90 spikes — needs ~12 days of recording to confirm.
 
 ```bash
 python3 -m venv .venv
-./.venv/bin/pip install websockets pandas pyarrow numpy scipy
+./.venv/bin/pip install -r requirements.txt      # pinned; reproducible
+
+./.venv/bin/python -m pytest                      # 44 tests, no network needed
 
 export PYTHONPATH=.
 ./.venv/bin/python scripts/verify_symbols.py    # verify codes against the live API
@@ -121,6 +123,7 @@ export PYTHONPATH=.
 ./.venv/bin/python scripts/test_leakage.py      # no-lookahead gate (must pass)
 ./.venv/bin/python scripts/validate_synth.py    # synthetic vs real ticks
 ./.venv/bin/python scripts/sweep_risk.py 200    # P(pass) surface (~90 min)
+./.venv/bin/python scripts/run_campaign.py 200  # expected 12-mo net after fees
 ```
 
 Run the tick recorder continuously — **Deriv serves only 24h of tick history, so
@@ -143,11 +146,13 @@ propfirm/
   data/       Deriv WS client, symbol verification, history paging, parquet store,
               MT5 tick reader, forward recorder, tick synthesis
   sim/        contract spec, no-lookahead feed, fill engine, ledger, engine loop
-  rules/      prop-firm rulesets, breach detection, career payout ledger
-  strategy/   control strategies (random entry, no-trade)
+  rules/      prop-firm rulesets, breach detection, career payout ledger, campaign
+  strategy/   control strategies (random entry, no-trade), reduced-M.A.E. seed
   research/   Monte Carlo harness, Boom/Crash spike analysis
-  llm/        (empty -- Phase 3)
+  llm/        Phase 3 overlay: state packet, strict schema, Opus/mock providers,
+              dual-mode switch (core vs core+overlay)
 scripts/      operational entry points
+tests/        pytest suite (leakage, determinism, ledger, fills, breach, career)
 data/raw/     immutable store (gitignored; ticks are NOT regenerable)
 docs/         measurements and findings
 ```
@@ -185,7 +190,7 @@ optimal play is one huge bet, and those rules are what forbid it.
 | 0 | Data layer, spread measurement, timeframe decision | done |
 | 1 | Tick-level engine, leakage gate | done |
 | 2 | Rule engine, Monte Carlo, controls | done |
-| 3 | Opus decision layer, A/B against the core | not started |
+| 3 | Opus decision layer, A/B against the core | scaffolding built (mock-testable; live run gated on budget) |
 | 4 | Research loop, pre-registration, champion/challenger | not started |
 | 5 | Boom/Crash hazard study at full power | recording |
 

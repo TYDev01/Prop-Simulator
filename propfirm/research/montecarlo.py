@@ -50,8 +50,8 @@ class TrialResult:
 
 
 def _one_trial(args) -> TrialResult:
-    seed, days, strategy_factory, spec, rules = args
-    ticks = gbm_path(days, seed)
+    seed, days, strategy_factory, spec, rules, tick_seconds = args
+    ticks = gbm_path(days, seed, tick_seconds=tick_seconds)
     engine = SimEngine(spec=spec, rules=rules)
     r = engine.run(ticks, strategy_factory(seed))
     return TrialResult(
@@ -64,9 +64,10 @@ def _one_trial(args) -> TrialResult:
 def run_trials(strategy_factory: Callable[[int], object], n: int = 200,
                days: float = 30.0, spec: ContractSpec = VOL75,
                rules: FirmRules = STRICT_100K, workers: int | None = None,
-               seed0: int = 0) -> list[TrialResult]:
+               seed0: int = 0, tick_seconds: int = TICK_SECONDS) -> list[TrialResult]:
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
-    args = [(seed0 + i, days, strategy_factory, spec, rules) for i in range(n)]
+    args = [(seed0 + i, days, strategy_factory, spec, rules, tick_seconds)
+            for i in range(n)]
     with ProcessPoolExecutor(max_workers=workers) as ex:
         return list(ex.map(_one_trial, args, chunksize=1))
 

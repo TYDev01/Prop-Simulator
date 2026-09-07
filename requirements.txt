@@ -1,0 +1,16 @@
+# Pinned so the environment is reproducible (REMAINING.md §5.3).
+# Versions are the ones the Phase 0-2 results were produced under.
+#
+# Core simulation + analysis. Required for the engine, rules, Monte Carlo and
+# the test suite. These have no network dependency.
+numpy==1.26.4
+pandas==2.2.2
+scipy==1.13.1
+pyarrow==16.1.0
+
+# Live data layer only (Deriv WebSocket client, history paging, tick recorder).
+# Not needed to run the simulator or the tests on already-captured data.
+websockets==12.0
+
+# Test + tooling.
+pytest==7.4.4
