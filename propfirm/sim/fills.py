@@ -93,11 +93,13 @@ class FillEngine:
 
     # --- orders --------------------------------------------------------------
 
-    def open_market(self, ledger: Ledger, direction: int, lots: float, mid: float,
-                    epoch: int, sl: float | None = None, tp: float | None = None,
-                    tag: str = "", meta: dict | None = None) -> Position | None:
-        """Open at market. Rejects orders that violate the broker's stops level."""
-        price = self.entry_price(direction, mid)
+    def _make_position(self, ledger: Ledger, direction: int, lots: float,
+                       price: float, mid: float, epoch: int, sl: float | None,
+                       tp: float | None, tag: str, meta: dict | None,
+                       trail_distance: float | None = None,
+                       breakeven_trigger: float | None = None,
+                       breakeven_offset: float = 0.0) -> Position | None:
+        """Validate against the stops level, lot minimum, and margin, then open."""
         min_dist = self.spec.stops_level_points * self.spec.point
         if sl is not None and abs(price - sl) < min_dist:
             return None
@@ -109,10 +111,65 @@ class FillEngine:
             return None
 
         pos = Position(direction=direction, lots=lots, entry_price=price,
-                       opened_epoch=epoch, sl=sl, tp=tp, tag=tag,
-                       meta=meta or {})
+                       opened_epoch=epoch, sl=sl, tp=tp, tag=tag, meta=meta or {},
+                       trail_distance=trail_distance,
+                       breakeven_trigger=breakeven_trigger,
+                       breakeven_offset=breakeven_offset)
         ledger.open(pos)
         return pos
+
+    def open_market(self, ledger: Ledger, direction: int, lots: float, mid: float,
+                    epoch: int, sl: float | None = None, tp: float | None = None,
+                    tag: str = "", meta: dict | None = None,
+                    trail_distance: float | None = None,
+                    breakeven_trigger: float | None = None,
+                    breakeven_offset: float = 0.0) -> Position | None:
+        """Open at market. Rejects orders that violate the broker's stops level."""
+        price = self.entry_price(direction, mid)
+        return self._make_position(ledger, direction, lots, price, mid, epoch, sl, tp,
+                                   tag, meta, trail_distance, breakeven_trigger,
+                                   breakeven_offset)
+
+    # --- resting orders ------------------------------------------------------
+
+    def resolve_pending(self, ledger: Ledger, prev_mid: float, mid: float,
+                        epoch: int) -> list[Position]:
+        """Fill triggered limit/stop entries and drop expired ones. One tick step."""
+        opened: list[Position] = []
+        still_pending = []
+        for order in ledger.pending:
+            if order.expiry_epoch is not None and epoch >= order.expiry_epoch:
+                continue                          # GTD order lapsed
+            if not order.triggered(prev_mid, mid):
+                still_pending.append(order)
+                continue
+            fill_mid = order.fill_mid(mid)
+            price = self.entry_price(order.direction, fill_mid)
+            pos = self._make_position(
+                ledger, order.direction, order.lots, price, mid, epoch,
+                order.sl, order.tp, order.tag, order.meta,
+                order.trail_distance, order.breakeven_trigger, order.breakeven_offset)
+            if pos is not None:
+                opened.append(pos)
+            # A rejected fill (stops level / margin) is dropped, not re-queued.
+        ledger.pending = still_pending
+        return opened
+
+    def manage(self, pos: Position, mid: float) -> None:
+        """Update a position's stop for trailing and break-even. Ratchet-only:
+        the stop never moves against the position, so a gap can't loosen it."""
+        if pos.breakeven_trigger is not None and not pos._breakeven_done:
+            reached = (mid >= pos.breakeven_trigger if pos.direction > 0
+                       else mid <= pos.breakeven_trigger)
+            if reached:
+                be = pos.entry_price + pos.direction * pos.breakeven_offset
+                pos.sl = be if pos.sl is None else (
+                    max(pos.sl, be) if pos.direction > 0 else min(pos.sl, be))
+                pos._breakeven_done = True
+        if pos.trail_distance is not None:
+            trailed = mid - pos.direction * pos.trail_distance
+            pos.sl = trailed if pos.sl is None else (
+                max(pos.sl, trailed) if pos.direction > 0 else min(pos.sl, trailed))
 
     def close_market(self, ledger: Ledger, pos: Position, mid: float, epoch: int,
                      reason: str = "manual", mae: float = 0.0, mfe: float = 0.0):

@@ -115,9 +115,20 @@ campaign; `scripts/compare_seed.py` runs it against random entry on identical se
 As §2.2 requires, this is expected to be indistinguishable from random entry — it is
 the seed the research loop (Phase 4) evolves, not a claimed edge.
 
-### 2.5 [GAP] Order types
-Spec section 5 requires market, limit, stop, trailing stop, break-even shift, and
-partial closes. Only market orders with static SL/TP exist.
+### 2.5 [DONE] Order types
+Spec section 5's full set now exists (`propfirm/sim/orders.py` + engine/ledger):
+- **Limit and stop entries** — resting `PendingOrder`s resolved each tick; a limit
+  fills at its level, a stop at the worse of its level and the available price (gap
+  honesty), with optional GTD expiry. `ctx.buy_limit/sell_limit/buy_stop/sell_stop`.
+- **Trailing stop** — `trail_distance` ratchets the stop behind price and never
+  loosens on a gap; resolved against the step's stop, then trailed for the next tick.
+- **Break-even shift** — `breakeven_trigger` (+ optional offset) moves the stop to
+  entry once price reaches the trigger.
+- **Partial closes** — `ctx.close_partial(pos, fraction)` banks part of a position
+  and keeps the rest; a fraction that would strand a sub-min-lot remainder closes
+  fully instead.
+Tests in `tests/test_orders.py` (11). A freshly-filled order is never resolved on its
+own opening tick.
 
 ### 2.6 [DONE] Controls run alongside
 `research/evaluate.py::compare` runs a candidate against the random-entry control on

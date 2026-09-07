@@ -145,7 +145,8 @@ PYTHONPATH=. setsid nohup ./.venv/bin/python scripts/record_ticks.py \
 propfirm/
   data/       Deriv WS client, symbol verification, history paging, parquet store,
               MT5 tick reader, forward recorder, tick synthesis
-  sim/        contract spec, no-lookahead feed, fill engine, ledger, engine loop
+  sim/        contract spec, no-lookahead feed, fill engine, ledger, engine loop,
+              order model (market/limit/stop, trailing, break-even, partials)
   rules/      prop-firm rulesets, breach detection, career payout ledger, campaign
   strategy/   control strategies (random entry, no-trade), reduced-M.A.E. seed
   research/   Monte Carlo, research loop (trade log, pre-registration, validation

@@ -52,19 +52,63 @@ class Context:
         return self.equity - max_loss_floor(self.state, self.ledger)
 
     def buy(self, lots: float, sl: float | None = None, tp: float | None = None,
-            tag: str = "", meta: dict | None = None) -> Position | None:
-        return self.engine.fills.open_market(self.ledger, +1, lots, self.mid,
-                                             self.view.epoch, sl, tp, tag, meta)
+            tag: str = "", meta: dict | None = None, trail_distance: float | None = None,
+            breakeven_trigger: float | None = None, breakeven_offset: float = 0.0
+            ) -> Position | None:
+        return self.engine.fills.open_market(
+            self.ledger, +1, lots, self.mid, self.view.epoch, sl, tp, tag, meta,
+            trail_distance, breakeven_trigger, breakeven_offset)
 
     def sell(self, lots: float, sl: float | None = None, tp: float | None = None,
-             tag: str = "", meta: dict | None = None) -> Position | None:
-        return self.engine.fills.open_market(self.ledger, -1, lots, self.mid,
-                                             self.view.epoch, sl, tp, tag, meta)
+             tag: str = "", meta: dict | None = None, trail_distance: float | None = None,
+             breakeven_trigger: float | None = None, breakeven_offset: float = 0.0
+             ) -> Position | None:
+        return self.engine.fills.open_market(
+            self.ledger, -1, lots, self.mid, self.view.epoch, sl, tp, tag, meta,
+            trail_distance, breakeven_trigger, breakeven_offset)
+
+    def place(self, direction: int, lots: float, order_type, trigger: float,
+              sl: float | None = None, tp: float | None = None, tag: str = "",
+              meta: dict | None = None, expiry_epoch: int | None = None,
+              trail_distance: float | None = None,
+              breakeven_trigger: float | None = None, breakeven_offset: float = 0.0):
+        """Queue a resting limit/stop entry; it fills when the market reaches trigger."""
+        from propfirm.sim.orders import PendingOrder
+        order = PendingOrder(
+            direction=direction, lots=lots, order_type=order_type, trigger=trigger,
+            sl=sl, tp=tp, tag=tag, meta=meta or {}, expiry_epoch=expiry_epoch,
+            trail_distance=trail_distance, breakeven_trigger=breakeven_trigger,
+            breakeven_offset=breakeven_offset)
+        self.ledger.pending.append(order)
+        return order
+
+    def buy_limit(self, lots: float, trigger: float, **kw):
+        from propfirm.sim.orders import OrderType
+        return self.place(+1, lots, OrderType.LIMIT, trigger, **kw)
+
+    def sell_limit(self, lots: float, trigger: float, **kw):
+        from propfirm.sim.orders import OrderType
+        return self.place(-1, lots, OrderType.LIMIT, trigger, **kw)
+
+    def buy_stop(self, lots: float, trigger: float, **kw):
+        from propfirm.sim.orders import OrderType
+        return self.place(+1, lots, OrderType.STOP, trigger, **kw)
+
+    def sell_stop(self, lots: float, trigger: float, **kw):
+        from propfirm.sim.orders import OrderType
+        return self.place(-1, lots, OrderType.STOP, trigger, **kw)
 
     def close(self, pos: Position, reason: str = "manual"):
         exc = self.engine._excursions.pop(id(pos), (0.0, 0.0))
         return self.engine.fills.close_market(self.ledger, pos, self.mid,
                                               self.view.epoch, reason, *exc)
+
+    def close_partial(self, pos: Position, fraction: float, reason: str = "partial"):
+        """Close a fraction of a position, leaving the rest open. Excursions persist."""
+        mae, mfe = self.engine._excursions.get(id(pos), (0.0, 0.0))
+        price = self.engine.fills.exit_price(pos.direction, self.mid)
+        return self.ledger.close_partial(pos, fraction, price, self.view.epoch,
+                                         reason, mae, mfe)
 
 
 class Strategy(Protocol):
@@ -122,15 +166,30 @@ class SimEngine:
             # ledger and the rule check; recomputing it was ~11% of runtime.
             equity = ledger.mark(view.epoch, mid)
 
-            # Resolve stops/targets before anything else can act.
-            if prev_mid is not None and ledger.positions:
-                for pos in list(ledger.positions):
+            # Positions that existed before this tick's pending fills — only these
+            # are managed/resolved now; a freshly-filled order waits until next tick
+            # so it can never be stopped on its own opening tick.
+            pre_positions = list(ledger.positions)
+
+            # Fill any resting limit/stop entries the market reached this tick.
+            if prev_mid is not None and ledger.pending:
+                if self.fills.resolve_pending(ledger, prev_mid, mid, view.epoch):
+                    equity = ledger.equity(mid)
+
+            # Resolve stops/targets against the stop valid during this step, then
+            # ratchet trailing / break-even for the NEXT tick. Managing before
+            # resolving would apply a just-trailed stop retroactively to the step
+            # and fire a false exit at the prior price.
+            if prev_mid is not None and pre_positions:
+                for pos in pre_positions:
                     self._track_excursion(pos, mid)
                     hit = self.fills.check_exit(pos, prev_mid, mid)
                     if hit is not None:
                         price, reason = hit
                         mae, mfe = self._excursions.pop(id(pos), (0.0, 0.0))
                         ledger.close(pos, price, view.epoch, reason, mae, mfe)
+                    else:
+                        self.fills.manage(pos, mid)   # update stop for next tick
                 # A close moves money from floating to realised, so the equity
                 # computed before the loop is stale.
                 equity = ledger.equity(mid)
