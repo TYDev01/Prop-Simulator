@@ -1,0 +1,81 @@
+# ---- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Virtualenvs (this one is ~450 MB)
+.venv/
+venv/
+env/
+ENV/
+
+# Tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ipynb_checkpoints/
+
+# ---- Secrets ---------------------------------------------------------------
+# DERIV_APP_ID and anything else environment-specific.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+credentials.json
+
+# ---- Runtime artefacts -----------------------------------------------------
+logs_*.txt
+*.log
+*.pid
+.recorder.pid
+.m1fetch.pid
+nohup.out
+
+# ---- Market data -----------------------------------------------------------
+# Paths are ANCHORED with a leading slash. A bare "data/" would match any
+# directory of that name at any depth -- including propfirm/data/, which would
+# silently drop seven source modules from the repo.
+#
+# Parquet stores are large and grow without bound (the tick recorder appends
+# continuously). Git is the wrong home for them.
+#
+# WARNING: /data/raw/ticks/ and /data/raw/tick_stream/ are NOT regenerable. Deriv
+# serves only the last 24h of tick history, so anything the recorder captured
+# beyond that window exists nowhere else. Ignoring them says git is the wrong
+# store -- not that they are disposable. They need a real backup.
+#
+# Candles ARE re-fetchable (365-day rolling window), so losing them is cheap.
+/data/*
+!/data/.gitkeep
+!/data/raw/
+/data/raw/*
+# The verified symbol registry is small and records what the live API actually
+# served rather than what we assumed, so it is worth versioning.
+!/data/raw/symbol_registry.json
+
+# ---- Research outputs ------------------------------------------------------
+# Sweep results and findings are small and are the point of the project, so they
+# stay tracked. Large or regenerable artefacts do not.
+*.parquet
+*.feather
+*.h5
+*.pkl
+
+# ---- Editors / OS ----------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
