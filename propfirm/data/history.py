@@ -5,19 +5,45 @@ walking `end` backwards until the API stops yielding earlier data.
 """
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 import pandas as pd
 
 from propfirm.config import MAX_ROWS_PER_REQUEST
-from propfirm.data.deriv_client import DerivClient, DerivError
+from propfirm.data.deriv_client import DerivClient, RateLimit
+
+# Rate-limit backoff. Deriv throttles bursts rather than queueing them, so a
+# RateLimit mid-fetch is transient and worth retrying before giving up.
+_MAX_RATE_LIMIT_RETRIES = 5
+_BACKOFF_BASE_S = 1.0
+
+
+async def _send_with_backoff(client: DerivClient, request: dict, progress: bool):
+    """Send a request, retrying RateLimit with exponential backoff.
+
+    Only RateLimit is retried. Any other DerivError propagates -- a bad symbol or
+    parameter is a real failure and must not be silently swallowed into a partial
+    result flagged 'exhausted' (REMAINING.md §1.1).
+    """
+    for attempt in range(_MAX_RATE_LIMIT_RETRIES + 1):
+        try:
+            return await client.send(request)
+        except RateLimit:
+            if attempt >= _MAX_RATE_LIMIT_RETRIES:
+                raise
+            wait = _BACKOFF_BASE_S * (2 ** attempt)
+            if progress:
+                print(f"    rate limited; backing off {wait:.0f}s "
+                      f"(retry {attempt + 1}/{_MAX_RATE_LIMIT_RETRIES})", flush=True)
+            await asyncio.sleep(wait)
 
 
 @dataclass
 class FetchResult:
     df: pd.DataFrame
     requests: int
-    exhausted: bool  # True if the API ran out of history before we hit the target
+    exhausted: bool  # True only if the API genuinely ran out of history
 
 
 async def fetch_candles(
@@ -32,14 +58,10 @@ async def fetch_candles(
 
     while seen < target_bars:
         want = min(MAX_ROWS_PER_REQUEST, target_bars - seen)
-        try:
-            reply = await client.send({
-                "ticks_history": symbol, "end": end, "count": want,
-                "style": "candles", "granularity": granularity,
-            })
-        except DerivError:
-            exhausted = True
-            break
+        reply = await _send_with_backoff(client, {
+            "ticks_history": symbol, "end": end, "count": want,
+            "style": "candles", "granularity": granularity,
+        }, progress)
         requests += 1
         candles = reply.get("candles") or []
         if not candles:
@@ -82,13 +104,9 @@ async def fetch_ticks(
 
     while seen < target_ticks:
         want = min(MAX_ROWS_PER_REQUEST, target_ticks - seen)
-        try:
-            reply = await client.send({
-                "ticks_history": symbol, "end": end, "count": want, "style": "ticks",
-            })
-        except DerivError:
-            exhausted = True
-            break
+        reply = await _send_with_backoff(client, {
+            "ticks_history": symbol, "end": end, "count": want, "style": "ticks",
+        }, progress)
         requests += 1
         hist = reply.get("history") or {}
         prices, times = hist.get("prices") or [], hist.get("times") or []

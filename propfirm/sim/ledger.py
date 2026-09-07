@@ -82,6 +82,7 @@ class Ledger:
     equity_hwm: float = 0.0
     trading_days: set[str] = field(default_factory=set)
     daily_pnl: dict[str, float] = field(default_factory=dict)
+    swap_paid: float = 0.0
     _day_end_epoch: int = 0
 
     def __post_init__(self) -> None:
@@ -110,21 +111,38 @@ class Ledger:
 
     # --- day boundary --------------------------------------------------------
 
+    def _accrue_swap(self) -> None:
+        """Charge one night's swap on every open position. Balance-affecting."""
+        for p in self.positions:
+            swap = self.spec.swap_charge(p.direction, p.lots)
+            if swap:
+                self.balance += swap
+                self.swap_paid += swap
+
     def mark(self, epoch: int, mark_price: float,
              equity: float | None = None) -> float:
         """Advance clock-dependent state. Call once per tick, before rule checks.
 
         Returns the equity it computed so callers need not recompute it.
         """
-        eq = self.equity(mark_price) if equity is None else equity
+        rolled = False
         if epoch >= self._day_end_epoch:
             start, end = broker_day_bounds(epoch, BROKER_UTC_OFFSET_HOURS)
             self._day_end_epoch = end
             day = broker_day(epoch)
             if day != self.current_day:
+                # Swap is charged for positions carried across the rollover, but
+                # not on the very first day, when nothing has been held overnight.
+                if self.current_day != "":
+                    self._accrue_swap()
+                    rolled = True
                 self.current_day = day
-                self.day_start_equity = eq
                 self.daily_pnl.setdefault(day, 0.0)
+                # day_start_equity is measured *after* swap, so the daily-loss
+                # rule does not count an overnight charge as intraday loss.
+                self.day_start_equity = self.equity(mark_price)
+        # A swap charge changes balance, so any equity handed in is now stale.
+        eq = self.equity(mark_price) if (equity is None or rolled) else equity
         if eq > self.equity_hwm:
             self.equity_hwm = eq
         return eq

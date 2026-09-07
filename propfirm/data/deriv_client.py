@@ -12,8 +12,6 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
-import websockets
-
 from propfirm.config import (
     DERIV_APP_ID,
     DERIV_WS_URL,
@@ -30,6 +28,19 @@ class DerivError(RuntimeError):
         self.message = message
         self.request = request
         super().__init__(f"[{code}] {message} (request: {request})")
+
+
+class RateLimit(DerivError):
+    """A throttling error. Transient: the request may succeed on retry.
+
+    Kept distinct from its parent so callers can back off and retry instead of
+    mistaking a throttle for a genuine end of history (REMAINING.md §1.1).
+    """
+
+
+# Error codes Deriv returns when it is throttling rather than refusing. Matched
+# case-insensitively; the API has used more than one spelling over time.
+_RATE_LIMIT_CODES = {"ratelimit", "toomanyrequests"}
 
 
 @dataclass
@@ -77,6 +88,10 @@ class DerivClient:
         await self.close()
 
     async def connect(self) -> None:
+        # Imported lazily so the simulator, tests, and offline analysis do not
+        # need the live-data dependency installed.
+        import websockets
+
         self._ws = await websockets.connect(self.url, ping_interval=20, ping_timeout=20)
         self._reader = asyncio.create_task(self._read_loop())
 
@@ -129,5 +144,8 @@ class DerivClient:
 
         if "error" in msg:
             err = msg["error"]
-            raise DerivError(err.get("code", "?"), err.get("message", "?"), request)
+            code = err.get("code", "?")
+            message = err.get("message", "?")
+            cls = RateLimit if str(code).lower() in _RATE_LIMIT_CODES else DerivError
+            raise cls(code, message, request)
         return msg

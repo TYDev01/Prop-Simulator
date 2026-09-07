@@ -134,6 +134,13 @@ class SimEngine:
                 # computed before the loop is stale.
                 equity = ledger.equity(mid)
 
+            # Broker margin stop-out: independent of the prop rules and resolved
+            # after stops. Force-closes the worst position(s) until the margin
+            # level recovers. Usually dormant -- prop rules breach first -- but
+            # load-bearing for high-leverage configs (REMAINING.md §1.2).
+            if ledger.positions and self._enforce_stop_out(ledger, mid, view.epoch):
+                equity = ledger.equity(mid)
+
             # Hard kill switch, ahead of any strategy decision.
             outcome = check(state, ledger, mid, view.epoch, equity)
             if outcome is not Outcome.RUNNING:
@@ -162,6 +169,22 @@ class SimEngine:
             peak_equity=state.peak_equity, trades=len(ledger.closed),
             trading_days=len(ledger.trading_days), ledger=ledger, state=state,
         )
+
+    def _enforce_stop_out(self, ledger: Ledger, mid: float, epoch: int) -> bool:
+        """Close the worst-loss positions until margin level >= the stop-out level.
+
+        Mirrors the broker's own liquidation: worst floating loss first, rechecked
+        after each close. Returns True if it closed anything.
+        """
+        level = self.spec.stop_out_level_pct
+        closed_any = False
+        while ledger.positions and ledger.margin_level(mid) < level:
+            worst = min(ledger.positions, key=lambda p: p.floating(self.spec, mid))
+            mae, mfe = self._excursions.pop(id(worst), (0.0, 0.0))
+            self.fills.close_market(ledger, worst, mid, epoch,
+                                    reason="stop_out", mae=mae, mfe=mfe)
+            closed_any = True
+        return closed_any
 
     def _track_excursion(self, pos: Position, mid: float) -> None:
         mae, mfe = self._excursions.get(id(pos), (0.0, 0.0))

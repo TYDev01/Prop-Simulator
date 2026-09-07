@@ -112,7 +112,9 @@ Underpowered at ~90 spikes — needs ~12 days of recording to confirm.
 
 ```bash
 python3 -m venv .venv
-./.venv/bin/pip install websockets pandas pyarrow numpy scipy
+./.venv/bin/pip install -r requirements.txt      # pinned; reproducible
+
+./.venv/bin/python -m pytest                      # 44 tests, no network needed
 
 export PYTHONPATH=.
 ./.venv/bin/python scripts/verify_symbols.py    # verify codes against the live API
@@ -148,6 +150,7 @@ propfirm/
   research/   Monte Carlo harness, Boom/Crash spike analysis
   llm/        (empty -- Phase 3)
 scripts/      operational entry points
+tests/        pytest suite (leakage, determinism, ledger, fills, breach, career)
 data/raw/     immutable store (gitignored; ticks are NOT regenerable)
 docs/         measurements and findings
 ```

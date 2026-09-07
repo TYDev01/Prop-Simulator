@@ -11,38 +11,31 @@ number we are relying on but have not confirmed · **[RISK]** operational hazard
 
 ## 1. Known bugs
 
-### 1.1 [BUG] Fetch errors are silently reported as "history exhausted"
-`propfirm/data/history.py` — both `fetch_candles` and `fetch_ticks`:
+### 1.1 [FIXED] Fetch errors are no longer misreported as "history exhausted"
+`propfirm/data/history.py`. `DerivClient` now raises a distinct `RateLimit`
+subclass; `history._send_with_backoff` retries `RateLimit` with exponential backoff
+and lets every other `DerivError` propagate, so `exhausted` is reserved for a
+genuinely empty (or short) response. Covered by `tests/test_history.py`.
 
-```python
-except DerivError:
-    exhausted = True
-    break
-```
+**Still open:** the measured depth limits (24h ticks, 365d candles, ~60k M1 bars)
+were established under the old swallowing code path. They are probably real — request
+counts line up with clean multiples — but should be **re-confirmed** now that the
+error handling distinguishes causes.
 
-**Any** API error — rate limit, transient failure, bad parameter — ends the paging
-loop and returns partial data flagged `exhausted=True`, i.e. indistinguishable from
-"the API has no more history." A rate limit hit mid-fetch therefore looks like a
-genuine depth limit.
+### 1.2 [FIXED] Margin stop-out is now enforced
+The engine calls `SimEngine._enforce_stop_out` each tick after stops resolve: while
+`Ledger.margin_level()` is below `ContractSpec.stop_out_level_pct` it force-closes
+the worst-loss position, mirroring the broker's own liquidation. Still usually
+dormant (prop rules breach first) but active for high-leverage configs. Covered by
+`tests/test_engine.py`. Note `stop_out_level_pct` defaults to 50.0 and is flagged
+`UNVERIFIED` (see 3.1).
 
-This matters because the measured depth limits (24h ticks, 365d candles, ~60k M1
-bars) were established with exactly this code path. They are probably real — the
-request counts line up with clean multiples — but **they should be re-confirmed
-once the error handling distinguishes causes.**
-
-Fix: catch `RateLimit` separately and retry with backoff; re-raise unexpected codes;
-reserve `exhausted` for a genuinely empty response.
-
-### 1.2 [BUG] Margin stop-out is never enforced
-`Ledger.margin_level()` exists and is never called. A position can run the account
-to arbitrarily negative equity without the broker closing it. Currently masked
-because prop rules breach long before stop-out, but it will matter for high-leverage
-configurations.
-
-### 1.3 [BUG] Swap/rollover is declared but never accrued
-`ContractSpec.swap_long/swap_short` exist, default to `0.0`, and nothing charges
-them. Multi-day holds are therefore free. Needs both the real values (see 3.1) and
-accrual at the rollover boundary.
+### 1.3 [FIXED] Swap/rollover is now accrued
+`Ledger._accrue_swap` charges `ContractSpec.swap_charge(direction, lots)` on every
+open position at each broker-day rollover, tracked in `Ledger.swap_paid`. The
+mechanism is complete and tested (`tests/test_ledger.py`), but with both swap rates
+still `0.0`/`UNVERIFIED` it currently charges nothing — real values are needed
+(see 3.1), as is triple-Wednesday accrual if it matters.
 
 ---
 
@@ -101,9 +94,9 @@ not implemented, and its lower intra-bar resolution needs its own validation.
 ## 3. Numbers we rely on but have not verified
 
 ### 3.1 [VERIFY] Contract specification — blocks quantitative claims
-Eight fields are flagged `UNVERIFIED` in `propfirm/sim/contract.py`:
+Nine fields are flagged `UNVERIFIED` in `propfirm/sim/contract.py`:
 `contract_size`, `min_lot`, `max_lot`, `lot_step`, `leverage`,
-`stops_level_points`, `swap_long`, `swap_short`.
+`stops_level_points`, `swap_long`, `swap_short`, `stop_out_level_pct`.
 
 P&L magnitudes are structurally right but **not quantitatively trustworthy** until
 these are confirmed. `contract_size` and `leverage` scale every result directly.
@@ -171,22 +164,28 @@ applied. Always use bracket patterns: `pgrep -f '[r]ecord_ticks.py'`.
 
 ## 5. Testing
 
-### 5.1 [GAP] No test suite
-Verification lives in ad-hoc scripts (`test_leakage.py`, `validate_synth.py`) that
-must be run manually. Needs pytest, so regressions surface automatically:
-- Leakage gate as a test, not a script
-- Determinism (identical inputs ⇒ bit-identical outputs)
-- Ledger arithmetic against hand-worked examples
+### 5.1 [DONE] Test suite
+`tests/` now holds a pytest suite (44 tests, `python3 -m pytest`) covering the items
+below. The ad-hoc scripts remain as operational entry points.
+- Leakage gate as a test (`test_leakage.py`)
+- Determinism — identical inputs ⇒ bit-identical outputs (`test_engine.py`)
+- Ledger arithmetic against hand-worked examples (`test_ledger.py`)
 - Gap-fill behaviour: stop *through* a level fills worse; target does not pay better
-- Breach detection at exact boundaries (equity precisely at the floor)
-- Day-rollover at the 00:00 GMT+2 boundary, including the integer-arithmetic fast
-  path introduced during optimisation
-- `CareerLedger` end-to-end
+  (`test_fills.py`)
+- Breach detection at exact boundaries (`test_breach.py`)
+- Day-rollover at the 00:00 GMT+2 boundary, including the integer fast path
+  (`test_ledger.py`)
+- Margin stop-out and swap accrual (`test_engine.py`, `test_ledger.py`)
+- Rate-limit retry vs genuine exhaustion (`test_history.py`)
+- `CareerLedger` end-to-end (`test_career.py`)
 
 ### 5.2 [GAP] No CI
-### 5.3 [GAP] No dependency pinning
-Packages were installed ad-hoc into `.venv`. No `requirements.txt` or
-`pyproject.toml`, so the environment is not reproducible.
+Suite runs locally; not yet wired to a CI trigger.
+
+### 5.3 [DONE] Dependency pinning
+`requirements.txt` pins the versions Phase 0–2 ran under. The live-data dependency
+(`websockets`) is now imported lazily, so the simulator, tests, and offline analysis
+run without it installed.
 
 ---
 
