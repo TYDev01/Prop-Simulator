@@ -95,7 +95,7 @@ class FillEngine:
 
     def open_market(self, ledger: Ledger, direction: int, lots: float, mid: float,
                     epoch: int, sl: float | None = None, tp: float | None = None,
-                    tag: str = "") -> Position | None:
+                    tag: str = "", meta: dict | None = None) -> Position | None:
         """Open at market. Rejects orders that violate the broker's stops level."""
         price = self.entry_price(direction, mid)
         min_dist = self.spec.stops_level_points * self.spec.point
@@ -109,7 +109,8 @@ class FillEngine:
             return None
 
         pos = Position(direction=direction, lots=lots, entry_price=price,
-                       opened_epoch=epoch, sl=sl, tp=tp, tag=tag)
+                       opened_epoch=epoch, sl=sl, tp=tp, tag=tag,
+                       meta=meta or {})
         ledger.open(pos)
         return pos
 

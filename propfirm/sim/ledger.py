@@ -33,6 +33,9 @@ class Position:
     sl: float | None = None
     tp: float | None = None
     tag: str = ""
+    # Per-trade metadata for the research log (§8): features at entry, declared
+    # invalidation, and any decision-layer reasoning. Opaque to the engine.
+    meta: dict = field(default_factory=dict)
 
     def floating(self, spec: ContractSpec, mark: float) -> float:
         return spec.pnl(self.direction, self.lots, self.entry_price, mark)
@@ -51,6 +54,7 @@ class ClosedTrade:
     mae: float = 0.0             # worst adverse excursion while open, in price
     mfe: float = 0.0             # best favourable excursion while open, in price
     tag: str = ""
+    meta: dict = field(default_factory=dict)   # carried through from the Position
 
 
 def broker_day(epoch: int, offset_hours: int = BROKER_UTC_OFFSET_HOURS) -> str:
@@ -169,6 +173,7 @@ class Ledger:
             entry_price=position.entry_price, exit_price=exit_price,
             opened_epoch=position.opened_epoch, closed_epoch=epoch,
             pnl=pnl, reason=reason, mae=mae, mfe=mfe, tag=position.tag,
+            meta=position.meta,
         )
         self.closed.append(trade)
         return trade

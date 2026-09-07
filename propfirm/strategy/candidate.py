@@ -23,3 +23,4 @@ class Candidate:
     risk_pct: float               # the risk the core sized this at
     features: dict = field(default_factory=dict)   # precomputed, for the state packet
     tag: str = "mae"
+    meta: dict = field(default_factory=dict)       # decision-layer notes, if any

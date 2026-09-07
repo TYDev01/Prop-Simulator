@@ -52,14 +52,14 @@ class Context:
         return self.equity - max_loss_floor(self.state, self.ledger)
 
     def buy(self, lots: float, sl: float | None = None, tp: float | None = None,
-            tag: str = "") -> Position | None:
+            tag: str = "", meta: dict | None = None) -> Position | None:
         return self.engine.fills.open_market(self.ledger, +1, lots, self.mid,
-                                             self.view.epoch, sl, tp, tag)
+                                             self.view.epoch, sl, tp, tag, meta)
 
     def sell(self, lots: float, sl: float | None = None, tp: float | None = None,
-             tag: str = "") -> Position | None:
+             tag: str = "", meta: dict | None = None) -> Position | None:
         return self.engine.fills.open_market(self.ledger, -1, lots, self.mid,
-                                             self.view.epoch, sl, tp, tag)
+                                             self.view.epoch, sl, tp, tag, meta)
 
     def close(self, pos: Position, reason: str = "manual"):
         exc = self.engine._excursions.pop(id(pos), (0.0, 0.0))

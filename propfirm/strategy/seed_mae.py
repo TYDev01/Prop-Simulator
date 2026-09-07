@@ -118,8 +118,14 @@ class ReducedMAE:
                 return
 
         self.last_invalidation = cand.invalidation
+        # Capture the full decision context for the research log (§8): entry
+        # features, the declared invalidation, sizing, and any overlay reasoning.
+        meta = dict(cand.features)
+        meta.update(direction=cand.direction, invalidation=cand.invalidation,
+                    risk_pct=cand.risk_pct)
+        meta.update(cand.meta)
         opened = (ctx.buy if cand.direction > 0 else ctx.sell)(
-            cand.lots, sl=cand.sl, tp=cand.tp, tag=cand.tag)
+            cand.lots, sl=cand.sl, tp=cand.tp, tag=cand.tag, meta=meta)
         if opened is not None:
             self._bars_since_trade = 0
 

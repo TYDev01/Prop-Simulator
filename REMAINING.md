@@ -63,18 +63,28 @@ exercisable offline at zero cost:
 script wires `OpusProvider` but leaves firing it — and the LLM budget decision
 (§7.4) — to the user. Per-trade research logging (§2.2) is still the next gap.
 
-### 2.2 [GAP] The research loop — `propfirm/research/` has only Monte Carlo
-Required per spec section 8:
-- Per-trade logging (features at entry, decision, reasoning, declared
-  invalidation, outcome, MAE/MFE). MAE/MFE are computed but not persisted.
-- Daily adherence audit, kept separate from strategy change
-- Pre-registration: predicted effect and falsification criterion recorded *before*
-  testing
-- Validation gate: discovery/validation/holdout partitioning, holdout touched once
-- **Running multiple-testing ledger that never resets**
-- Champion/challenger with out-of-sample promotion margin
-- Strategy versioning with rationale, evidence, and test result per change
-- Calibration score for Opus-as-researcher (how often do its predictions hold?)
+### 2.2 [DONE] The research loop — `propfirm/research/`
+Built per spec section 8/9.1, all pure-Python and tested (`tests/test_research.py`),
+tied together end-to-end by `scripts/research_demo.py`:
+- **Per-trade logging** (`trade_log.py`) — features at entry, declared invalidation,
+  overlay reasoning, outcome, MAE/MFE, and realised R. Entry metadata now flows
+  candidate → position → closed trade via a `meta` dict.
+- **Pre-registration + calibration** (`preregistration.py`) — predicted effect,
+  falsification criterion, and price level recorded *before* the test; a hit-rate
+  and Brier calibration score for the researcher.
+- **Validation gate** (`partition.py`) — discovery/validation/holdout seed split
+  with a `HoldoutGuard` that raises on a second access (touch-once, enforced).
+- **Running multiple-testing ledger that never resets** (`multiple_testing.py`) —
+  Bonferroni bar that tightens with every test, Benjamini-Hochberg FDR, JSONL
+  persistence that restores the count across restarts.
+- **Champion/challenger** (`champion_challenger.py`) — out-of-sample promotion
+  margin, versioning with rationale/evidence/test-result per change.
+- **Partition-aware evaluation** (`evaluate.py`) — scores a factory over a specific
+  seed set; `compare` runs two arms on identical seeds with a two-proportion test.
+
+**Still open:** the daily rule-adherence audit (a distinct cadence from strategy
+change) is not built; and driving these from a live *Opus* researcher (auto
+hypothesis generation) needs the LLM budget (§7.4). The demo uses a fixed hypothesis.
 
 ### 2.3 [DONE] Career progression and payout are wired
 `propfirm/rules/campaign.py` drives the full career: fee → phase 1 → phase 2 →
@@ -107,10 +117,13 @@ the seed the research loop (Phase 4) evolves, not a claimed edge.
 Spec section 5 requires market, limit, stop, trailing stop, break-even shift, and
 partial closes. Only market orders with static SL/TP exist.
 
-### 2.6 [GAP] Controls are not run alongside
-Spec section 9.1 requires random-entry and synthetic-GBM controls running
-*continuously*, not as one-offs. `gbm_ticks()` exists but no comparison harness runs
-a candidate against both arms automatically.
+### 2.6 [PARTIAL] Controls run alongside
+`research/evaluate.py::compare` runs a candidate against the random-entry control on
+identical seeds with a significance test, and `champion_challenger.consider` scores
+both arms out-of-sample as a matter of course — so the random-entry arm now runs
+alongside rather than as a one-off. **Still open:** the synthetic-GBM-vs-real-Vol75
+control comparison (§6) — `gbm_ticks()` exists but the matched-vol GBM arm isn't
+wired into the comparison harness yet.
 
 ### 2.7 [GAP] Long-history replay
 M1 covers only ~6 weeks. Synthesis from M15 for the full 365 days is designed but

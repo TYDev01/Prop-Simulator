@@ -148,7 +148,8 @@ propfirm/
   sim/        contract spec, no-lookahead feed, fill engine, ledger, engine loop
   rules/      prop-firm rulesets, breach detection, career payout ledger, campaign
   strategy/   control strategies (random entry, no-trade), reduced-M.A.E. seed
-  research/   Monte Carlo harness, Boom/Crash spike analysis
+  research/   Monte Carlo, research loop (trade log, pre-registration, validation
+              partitioning, multiple-testing ledger, champion/challenger), spikes
   llm/        Phase 3 overlay: state packet, strict schema, Opus/mock providers,
               dual-mode switch (core vs core+overlay)
 scripts/      operational entry points
@@ -191,7 +192,7 @@ optimal play is one huge bet, and those rules are what forbid it.
 | 1 | Tick-level engine, leakage gate | done |
 | 2 | Rule engine, Monte Carlo, controls | done |
 | 3 | Opus decision layer, A/B against the core | scaffolding built (mock-testable; live run gated on budget) |
-| 4 | Research loop, pre-registration, champion/challenger | not started |
+| 4 | Research loop, pre-registration, champion/challenger | done (daily-adherence audit + live Opus researcher pending) |
 | 5 | Boom/Crash hazard study at full power | recording |
 
 Known bugs, unverified numbers, and open questions:
