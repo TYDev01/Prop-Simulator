@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from propfirm.research.adherence import audit_from_ledger, summarise_audit
 from propfirm.research.champion_challenger import ChampionChallenger, StrategyVersion
 from propfirm.research.evaluate import compare, p_pass_over
 from propfirm.research.multiple_testing import MultipleTestingLedger
@@ -104,12 +105,15 @@ def main() -> int:
     print(f"HOLDOUT (touched once): champion '{cc.champion.label}' "
           f"P(pass) = {champ_holdout * 100:.1f}%\n")
 
-    # 6. Researcher calibration + a per-trade log sample.
+    # 6. Researcher calibration + a per-trade log sample + the daily-adherence
+    #    cadence (discipline, kept separate from the strategy tests above).
     print(f"researcher calibration: {reg.calibration()}")
     ticks = gbm_path(args.days, seed=part.discovery[0], tick_seconds=args.tick_seconds)
     run = SimEngine(spec=VOL75, rules=STRICT_100K).run(ticks, ReducedMAE())
     print(f"sample trade log (seed {part.discovery[0]}): "
           f"{summarise(records_from_ledger(run.ledger))}")
+    audit = audit_from_ledger(run.ledger, STRICT_100K)
+    print(f"daily adherence audit:  {summarise_audit(audit)}")
     return 0
 
 

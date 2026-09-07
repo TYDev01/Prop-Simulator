@@ -38,6 +38,18 @@ def gbm_path(days: float, seed: int, start_price: float = 49_766.0,
                          "price": prices})
 
 
+# A second, independent GBM realisation at the same 75% vol — the matched-vol
+# control source (§9.1). Same seed argument, a disjoint RNG stream, so
+# compare_sources(gbm_path, matched_gbm) is a genuine null: two draws of the same
+# process should be statistically indistinguishable.
+_MATCHED_GBM_OFFSET = 1_000_000
+
+
+def matched_gbm(days: float, seed: int, start_price: float = 49_766.0,
+                tick_seconds: int = TICK_SECONDS) -> pd.DataFrame:
+    return gbm_path(days, seed + _MATCHED_GBM_OFFSET, start_price, tick_seconds)
+
+
 @dataclass
 class TrialResult:
     seed: int
@@ -50,8 +62,8 @@ class TrialResult:
 
 
 def _one_trial(args) -> TrialResult:
-    seed, days, strategy_factory, spec, rules, tick_seconds = args
-    ticks = gbm_path(days, seed, tick_seconds=tick_seconds)
+    seed, days, strategy_factory, spec, rules, tick_seconds, path_fn = args
+    ticks = path_fn(days, seed, tick_seconds=tick_seconds)
     engine = SimEngine(spec=spec, rules=rules)
     r = engine.run(ticks, strategy_factory(seed))
     return TrialResult(
@@ -64,9 +76,17 @@ def _one_trial(args) -> TrialResult:
 def run_trials(strategy_factory: Callable[[int], object], n: int = 200,
                days: float = 30.0, spec: ContractSpec = VOL75,
                rules: FirmRules = STRICT_100K, workers: int | None = None,
-               seed0: int = 0, tick_seconds: int = TICK_SECONDS) -> list[TrialResult]:
+               seed0: int = 0, tick_seconds: int = TICK_SECONDS,
+               path_fn: Callable = gbm_path) -> list[TrialResult]:
+    """Run n independent challenge trials in parallel.
+
+    `path_fn(days, seed, tick_seconds) -> DataFrame` is the tick source. It defaults
+    to unconditioned GBM (the control arm and P(pass) estimation); pass a real-tick
+    replayer to compare a strategy on real Vol75 vs matched-vol GBM (§9.1). Must be a
+    module-level callable so it pickles to the worker processes.
+    """
     workers = workers or max(1, (os.cpu_count() or 2) - 1)
-    args = [(seed0 + i, days, strategy_factory, spec, rules, tick_seconds)
+    args = [(seed0 + i, days, strategy_factory, spec, rules, tick_seconds, path_fn)
             for i in range(n)]
     with ProcessPoolExecutor(max_workers=workers) as ex:
         return list(ex.map(_one_trial, args, chunksize=1))

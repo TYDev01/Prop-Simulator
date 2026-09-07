@@ -81,10 +81,12 @@ tied together end-to-end by `scripts/research_demo.py`:
   margin, versioning with rationale/evidence/test-result per change.
 - **Partition-aware evaluation** (`evaluate.py`) — scores a factory over a specific
   seed set; `compare` runs two arms on identical seeds with a two-proportion test.
+- **Daily rule-adherence audit** (`adherence.py`) — the second cadence, kept separate
+  from strategy change: per-day loss-room used, stop-slippage past 1R, the
+  consistency cap, and min-trading-days progress, in realised terms.
 
-**Still open:** the daily rule-adherence audit (a distinct cadence from strategy
-change) is not built; and driving these from a live *Opus* researcher (auto
-hypothesis generation) needs the LLM budget (§7.4). The demo uses a fixed hypothesis.
+**Still open:** driving these from a live *Opus* researcher (auto hypothesis
+generation) needs the LLM budget (§7.4). The demo uses a fixed hypothesis.
 
 ### 2.3 [DONE] Career progression and payout are wired
 `propfirm/rules/campaign.py` drives the full career: fee → phase 1 → phase 2 →
@@ -117,13 +119,15 @@ the seed the research loop (Phase 4) evolves, not a claimed edge.
 Spec section 5 requires market, limit, stop, trailing stop, break-even shift, and
 partial closes. Only market orders with static SL/TP exist.
 
-### 2.6 [PARTIAL] Controls run alongside
+### 2.6 [DONE] Controls run alongside
 `research/evaluate.py::compare` runs a candidate against the random-entry control on
 identical seeds with a significance test, and `champion_challenger.consider` scores
-both arms out-of-sample as a matter of course — so the random-entry arm now runs
-alongside rather than as a one-off. **Still open:** the synthetic-GBM-vs-real-Vol75
-control comparison (§6) — `gbm_ticks()` exists but the matched-vol GBM arm isn't
-wired into the comparison harness yet.
+both arms out-of-sample as a matter of course. The matched-vol GBM control arm is now
+wired too: `run_trials` takes a pluggable `path_fn`, and `compare_sources` runs one
+strategy across two tick sources (`gbm_path` vs `matched_gbm`), correctly reporting
+no difference for the null. **The one piece still data-gated:** the real-Vol75-vs-GBM
+comparison (§6) needs captured real ticks to plug in as the second source — the
+harness is ready, the data is not.
 
 ### 2.7 [GAP] Long-history replay
 M1 covers only ~6 weeks. Synthesis from M15 for the full 365 days is designed but
