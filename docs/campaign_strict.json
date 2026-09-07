@@ -1,0 +1,18 @@
+{
+  "label": "random-entry risk=1.0% rr=2.0 tpd=3.0 @ 10s",
+  "n": 150,
+  "expected_net": -4047.5964686864663,
+  "median_net": -8500.0,
+  "net_p10": -11500.0,
+  "net_p90": 7961.362258175162,
+  "std_net": 9977.094100222814,
+  "p_profitable": 0.24666666666666667,
+  "p_reached_funded": 0.82,
+  "p_reached_payout": 0.48,
+  "mean_attempts": 18.98,
+  "mean_fees": 9490.0,
+  "mean_payouts": 5442.403531313534,
+  "elapsed_s": 1109.7,
+  "tick_seconds": 10,
+  "horizon_days": 365.0
+}
