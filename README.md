@@ -123,6 +123,7 @@ export PYTHONPATH=.
 ./.venv/bin/python scripts/test_leakage.py      # no-lookahead gate (must pass)
 ./.venv/bin/python scripts/validate_synth.py    # synthetic vs real ticks
 ./.venv/bin/python scripts/sweep_risk.py 200    # P(pass) surface (~90 min)
+./.venv/bin/python scripts/run_campaign.py 200  # expected 12-mo net after fees
 ```
 
 Run the tick recorder continuously — **Deriv serves only 24h of tick history, so
@@ -145,7 +146,7 @@ propfirm/
   data/       Deriv WS client, symbol verification, history paging, parquet store,
               MT5 tick reader, forward recorder, tick synthesis
   sim/        contract spec, no-lookahead feed, fill engine, ledger, engine loop
-  rules/      prop-firm rulesets, breach detection, career payout ledger
+  rules/      prop-firm rulesets, breach detection, career payout ledger, campaign
   strategy/   control strategies (random entry, no-trade)
   research/   Monte Carlo harness, Boom/Crash spike analysis
   llm/        (empty -- Phase 3)

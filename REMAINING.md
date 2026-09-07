@@ -64,12 +64,19 @@ Required per spec section 8:
 - Strategy versioning with rationale, evidence, and test result per change
 - Calibration score for Opus-as-researcher (how often do its predictions hold?)
 
-### 2.3 [GAP] Career progression and payout are not wired
-`CareerLedger` is implemented and tested in isolation but **nothing calls it**. The
-engine runs a single phase. Missing: phase 1 → phase 2 → funded progression, payout
-cycles, breach → buy another challenge, and the headline
-**expected-12-month-net-after-fees** number. This is the metric the whole project
-exists to produce.
+### 2.3 [DONE] Career progression and payout are wired
+`propfirm/rules/campaign.py` drives the full career: fee → phase 1 → phase 2 →
+funded → 14-day payout cycles → breach → buy another, over a 365-day horizon that
+each phase/cycle draws down as a time budget (via `RunResult.elapsed_days`).
+`run_campaign` runs many careers in parallel and `summarise_campaign` reports the
+headline **expected 12-month net after fees** as a distribution. Entry point:
+`scripts/run_campaign.py`; tests in `tests/test_campaign.py`.
+
+**Caveats still open:** the funded stage models each 14-day cycle as a fresh
+base-size account with profit withdrawn (drawdown resets to base); triple-Wednesday
+swap and partial payouts are not modelled; the headline number inherits every
+`UNVERIFIED` sizing field from 3.1, so its *magnitude* is not yet trustworthy even
+though the machinery is correct.
 
 ### 2.4 [GAP] No seed strategy
 Only controls exist (`RandomEntry`, `NoTrade`). The reduced M.A.E. skeleton from

@@ -82,6 +82,7 @@ class RunResult:
     trading_days: int
     ledger: Ledger
     state: ChallengeState
+    elapsed_days: float = 0.0    # calendar days from first tick to the last processed
 
 
 @dataclass
@@ -168,6 +169,7 @@ class SimEngine:
             final_equity=ledger.equity(prev_mid if prev_mid else 0.0),
             peak_equity=state.peak_equity, trades=len(ledger.closed),
             trading_days=len(ledger.trading_days), ledger=ledger, state=state,
+            elapsed_days=(last_epoch - first_epoch) / 86400.0,
         )
 
     def _enforce_stop_out(self, ledger: Ledger, mid: float, epoch: int) -> bool:
