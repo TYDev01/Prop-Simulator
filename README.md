@@ -147,7 +147,7 @@ propfirm/
               MT5 tick reader, forward recorder, tick synthesis
   sim/        contract spec, no-lookahead feed, fill engine, ledger, engine loop
   rules/      prop-firm rulesets, breach detection, career payout ledger, campaign
-  strategy/   control strategies (random entry, no-trade)
+  strategy/   control strategies (random entry, no-trade), reduced-M.A.E. seed
   research/   Monte Carlo harness, Boom/Crash spike analysis
   llm/        (empty -- Phase 3)
 scripts/      operational entry points

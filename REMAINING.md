@@ -78,10 +78,18 @@ swap and partial payouts are not modelled; the headline number inherits every
 `UNVERIFIED` sizing field from 3.1, so its *magnitude* is not yet trustworthy even
 though the machinery is correct.
 
-### 2.4 [GAP] No seed strategy
-Only controls exist (`RandomEntry`, `NoTrade`). The reduced M.A.E. skeleton from
-spec section 7 — structural stops, multi-filter selectivity, declared invalidation —
-is unbuilt, so there is nothing yet for the research loop to evolve.
+### 2.4 [DONE] Seed strategy
+`propfirm/strategy/seed_mae.py` implements the reduced M.A.E. skeleton from spec
+section 7: swing-based **structural stops**, **multi-filter selectivity** (donchian
+breakout + slow-bias agreement + cooldown, all as cost control), and **declared
+invalidation** recorded on the position before entry. Signals use completed bars
+only; entries execute at the current tick, so there is no lookahead. Deterministic
+given the path. `ReducedMAEFactory` makes it drop-in for Monte Carlo and the
+campaign; `scripts/compare_seed.py` runs it against random entry on identical seeds
+(the §9.1 A/B). Tests in `tests/test_seed_mae.py`.
+
+As §2.2 requires, this is expected to be indistinguishable from random entry — it is
+the seed the research loop (Phase 4) evolves, not a claimed edge.
 
 ### 2.5 [GAP] Order types
 Spec section 5 requires market, limit, stop, trailing stop, break-even shift, and
